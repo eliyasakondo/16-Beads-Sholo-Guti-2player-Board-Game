@@ -456,9 +456,9 @@ function resizeCanvas() {
   const parent = canvas.parentElement;
   const sizeW = Math.min(parent.clientWidth, 720);
   const isMobile = window.innerWidth <= 700;
-  const minH = sizeW * (isMobile ? 1.35 : 1);
-  const maxH = isMobile ? window.innerHeight * 0.88 : sizeW;
-  const sizeH = isMobile ? Math.min(Math.max(minH, window.innerHeight * 0.7), maxH) : sizeW;
+  const minH = sizeW * (isMobile ? 1.55 : 1);
+  const maxH = isMobile ? window.innerHeight * 0.95 : sizeW;
+  const sizeH = isMobile ? Math.min(Math.max(minH, window.innerHeight * 0.8), maxH) : sizeW;
   canvas.width = sizeW;
   canvas.height = sizeH;
   paddingX = sizeW * (isMobile ? 0.02 : 0.06);
