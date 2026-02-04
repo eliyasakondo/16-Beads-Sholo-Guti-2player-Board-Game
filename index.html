@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>16 Beads</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <section class="lobby" id="lobby">
+      <h2>Online Lobby</h2>
+      <p>Select Create or Join to start. Game will open after you enter.</p>
+      <div class="lobby-actions">
+        <div class="lobby-card">
+          <h3>Create Room</h3>
+          <input id="hostName" placeholder="Your name" />
+          <button id="lobbyCreateBtn">Create Room</button>
+          <div class="room-code" id="lobbyRoomCode">Room: -</div>
+        </div>
+        <div class="lobby-card">
+          <h3>Join Room</h3>
+          <input id="joinName" placeholder="Your name" />
+          <input id="roomInput" placeholder="Enter room code" />
+          <button id="lobbyJoinBtn">Join Room</button>
+        </div>
+      </div>
+      <div class="online-status" id="onlineStatus">Status: Offline</div>
+    </section>
+
+    <div id="mainContent" hidden>
+      <header>
+        <h1>16 Beads</h1>
+        <p>Red vs Blue — select a bead and move to a valid point.</p>
+      </header>
+
+      <div class="board-wrap" id="gameContainer">
+      <div class="mobile-top">
+        <button id="mobileControlsBtn" class="mobile-controls">⚙ Controls</button>
+        <div id="turnOverlay" class="turn-overlay">Your turn</div>
+      </div>
+      <canvas id="board" width="720" height="720" aria-label="Sholo Guti Board"></canvas>
+      <div class="legend">
+        <div id="turnOverlayDesktop" class="turn-overlay">Your turn</div>
+        <div class="turn" id="turnText">Turn: Red</div>
+        <button id="resetBtn">Reset</button>
+        <button id="undoBtn">Undo</button>
+        <div class="toggles">
+          <label><input type="checkbox" id="darkToggle" /> Dark</label>
+          <label><input type="checkbox" id="contrastToggle" /> High Contrast</label>
+          <label><input type="checkbox" id="shadowToggle" checked /> Shadows</label>
+          <label><input type="checkbox" id="forcedToggle" /> Forced Capture</label>
+          <label><input type="checkbox" id="soundToggle" checked /> Sound</label>
+          <label><input type="checkbox" id="lowPowerToggle" /> Low Power</label>
+          <label><input type="checkbox" id="largeUiToggle" /> Large UI</label>
+          <button id="fullscreenBtn">Fullscreen</button>
+        </div>
+
+        <div class="online" id="onlinePanel">
+          <div class="online-title">Room</div>
+          <div class="room-code" id="roomCode">Room: -</div>
+          <div class="online-status" id="gameStatus">Waiting for players...</div>
+          <div class="color-status" id="colorStatus">Color will be assigned automatically.</div>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
