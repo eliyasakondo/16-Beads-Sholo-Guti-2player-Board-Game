@@ -9,7 +9,11 @@ const io = new Server(server);
 
 const rooms = new Map();
 
-app.use(express.static(path.join(__dirname)));
+const staticRoot = path.join(__dirname);
+app.use(express.static(staticRoot));
+app.get("/", (req, res) => {
+  res.sendFile(path.join(staticRoot, "index.html"));
+});
 
 io.on("connection", (socket) => {
   socket.on("create-room", (payload) => {
