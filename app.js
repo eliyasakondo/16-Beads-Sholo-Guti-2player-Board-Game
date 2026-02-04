@@ -456,13 +456,12 @@ function resizeCanvas() {
   const parent = canvas.parentElement;
   const sizeW = Math.min(parent.clientWidth, 720);
   const isMobile = window.innerWidth <= 700;
+  const viewportH = window.visualViewport?.height || window.innerHeight;
   const minH = sizeW * (isMobile ? 1.55 : 1);
-  const maxH = isMobile ? window.innerHeight * 0.95 : sizeW;
-  const sizeH = isMobile ? Math.min(Math.max(minH, window.innerHeight * 0.8), maxH) : sizeW;
+  const maxH = isMobile ? viewportH * 0.95 : sizeW;
+  const sizeH = isMobile ? Math.min(Math.max(minH, viewportH * 0.8), maxH) : sizeW;
   canvas.width = sizeW;
   canvas.height = sizeH;
-  paddingX = sizeW * (isMobile ? 0.02 : 0.06);
-  paddingY = sizeH * (isMobile ? 0.02 : 0.06);
 
   const minX = Math.min(...nodes.map((n) => n.x));
   const maxX = Math.max(...nodes.map((n) => n.x));
@@ -471,25 +470,39 @@ function resizeCanvas() {
 
   const boardWidth = maxX - minX;
   const boardHeight = maxY - minY;
-  const usableW = sizeW - paddingX * 2;
-  const usableH = sizeH - paddingY * 2;
+  const computeLayout = (padX, padY) => {
+    const usableW = sizeW - padX * 2;
+    const usableH = sizeH - padY * 2;
 
-  if (isMobile) {
-    spacingX = usableW / boardWidth;
-    spacingY = usableH / boardHeight;
-  } else {
-    const uniformSpacing = Math.min(usableW / boardWidth, usableH / boardHeight);
-    spacingX = uniformSpacing;
-    spacingY = uniformSpacing;
+    if (isMobile) {
+      spacingX = usableW / boardWidth;
+      spacingY = usableH / boardHeight;
+    } else {
+      const uniformSpacing = Math.min(usableW / boardWidth, usableH / boardHeight);
+      spacingX = uniformSpacing;
+      spacingY = uniformSpacing;
+    }
+
+    const boardPixelWidth = boardWidth * spacingX;
+    const boardPixelHeight = boardHeight * spacingY;
+
+    offsetX = (sizeW - boardPixelWidth) / 2 - minX * spacingX;
+    offsetY = (sizeH - boardPixelHeight) / 2 - minY * spacingY;
+
+    pieceRadius = Math.max(10, Math.min(spacingX, spacingY) * 0.22);
+  };
+
+  paddingX = Math.max(10, sizeW * (isMobile ? 0.02 : 0.06));
+  paddingY = Math.max(10, sizeH * (isMobile ? 0.02 : 0.06));
+  computeLayout(paddingX, paddingY);
+
+  const safePadX = Math.max(paddingX, pieceRadius + 10);
+  const safePadY = Math.max(paddingY, pieceRadius + 10);
+  if (safePadX !== paddingX || safePadY !== paddingY) {
+    paddingX = safePadX;
+    paddingY = safePadY;
+    computeLayout(paddingX, paddingY);
   }
-
-  const boardPixelWidth = boardWidth * spacingX;
-  const boardPixelHeight = boardHeight * spacingY;
-
-  offsetX = (sizeW - boardPixelWidth) / 2 - minX * spacingX;
-  offsetY = (sizeH - boardPixelHeight) / 2 - minY * spacingY;
-
-  pieceRadius = Math.max(10, Math.min(spacingX, spacingY) * 0.22);
   requestDraw();
 }
 
@@ -716,6 +729,10 @@ if (undoBtn) {
   });
 }
 window.addEventListener("resize", resizeCanvas);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", resizeCanvas);
+  window.visualViewport.addEventListener("scroll", resizeCanvas);
+}
 
 if (shadowToggle) {
   showShadows = shadowToggle.checked;
