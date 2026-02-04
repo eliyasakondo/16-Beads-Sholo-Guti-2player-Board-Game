@@ -457,7 +457,7 @@ function resizeCanvas() {
   const isMobile = window.innerWidth <= 700;
   canvas.width = size;
   canvas.height = size;
-  padding = size * (isMobile ? 0.035 : 0.06);
+  padding = size * (isMobile ? 0.02 : 0.06);
 
   const minX = Math.min(...nodes.map((n) => n.x));
   const maxX = Math.max(...nodes.map((n) => n.x));
