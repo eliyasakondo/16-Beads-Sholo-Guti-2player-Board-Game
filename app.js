@@ -29,6 +29,8 @@ const gameStatus = document.getElementById("gameStatus");
 const turnOverlay = document.getElementById("turnOverlay");
 const turnOverlayDesktop = document.getElementById("turnOverlayDesktop");
 const mobileControlsBtn = document.getElementById("mobileControlsBtn");
+const controlsBackdrop = document.getElementById("controlsBackdrop");
+const closeControlsBtn = document.getElementById("closeControlsBtn");
 
 let spacingX = 60;
 let spacingY = 60;
@@ -829,9 +831,23 @@ if (largeUiToggle) {
 }
 
 if (mobileControlsBtn) {
+  const setControlsOpen = (isOpen) => {
+    document.body.classList.toggle("show-controls", isOpen);
+    if (controlsBackdrop) controlsBackdrop.hidden = !isOpen;
+  };
+
   mobileControlsBtn.addEventListener("click", () => {
-    document.body.classList.toggle("show-controls");
+    const isOpen = document.body.classList.contains("show-controls");
+    setControlsOpen(!isOpen);
   });
+
+  if (closeControlsBtn) {
+    closeControlsBtn.addEventListener("click", () => setControlsOpen(false));
+  }
+
+  if (controlsBackdrop) {
+    controlsBackdrop.addEventListener("click", () => setControlsOpen(false));
+  }
 }
 
 if (fullscreenBtn) {

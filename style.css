@@ -128,6 +128,18 @@ canvas {
   display: none;
 }
 
+.controls-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 18, 24, 0.45);
+  z-index: 9;
+}
+
+.close-controls {
+  display: none;
+  background: #0f172a;
+}
+
 .legend {
   display: flex;
   flex-direction: column;
@@ -295,15 +307,31 @@ button {
     bottom: 0;
     z-index: 10;
     background: #fff;
-    padding: 14px 16px 20px;
+    padding: 12px 14px 16px;
     border-radius: 16px 16px 0 0;
     box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.2);
     transform: translateY(110%);
     transition: transform 0.2s ease;
+    max-height: 82vh;
+    overflow: auto;
   }
 
   body.show-controls .legend {
     transform: translateY(0);
+  }
+
+  body.show-controls header {
+    display: none;
+  }
+
+  body.show-controls .mobile-top {
+    display: none;
+  }
+
+  .close-controls {
+    display: inline-flex;
+    align-self: flex-end;
+    margin-bottom: 8px;
   }
 
   body.show-controls .mobile-top {
