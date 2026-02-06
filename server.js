@@ -67,6 +67,23 @@ io.on("connection", (socket) => {
     socket.to(room).emit("state", state);
   });
 
+  socket.on("undo-request", ({ room, state, name }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    const requesterName = name || (socket.id === data.host ? data.hostName : data.guestName) || "Opponent";
+    socket.to(room).emit("undo-request", { name: requesterName, state });
+  });
+
+  socket.on("undo-response", ({ room, approved, state }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    if (approved) {
+      io.to(room).emit("undo-approved", { state });
+    } else {
+      socket.to(room).emit("undo-rejected");
+    }
+  });
+
   socket.on("disconnect", () => {
     for (const [room, data] of rooms.entries()) {
       if (data.host === socket.id || data.guest === socket.id) {

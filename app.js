@@ -67,6 +67,8 @@ let opponentName = "";
 let lastTurn = null;
 let gameStarted = false;
 let awaitingState = false;
+let undoPending = false;
+let pendingUndoState = null;
 
 const STORAGE_KEY = "sholo-guti-state";
 
@@ -139,6 +141,27 @@ function ensureSocket() {
     if (playerName === h) opponentName = g || "";
     else if (playerName === g) opponentName = h || "";
     updateTurn();
+  });
+
+  socket.on("undo-request", ({ name, state }) => {
+    const requester = name || "Opponent";
+    const approved = window.confirm(`${requester} wants to undo the last move. Allow?`);
+    socket.emit("undo-response", { room: currentRoom, approved, state });
+  });
+
+  socket.on("undo-approved", ({ state }) => {
+    undoPending = false;
+    pendingUndoState = null;
+    if (stateStack.length > 0) stateStack.pop();
+    restoreState(state);
+    saveState();
+    setOnlineStatus("undo approved");
+  });
+
+  socket.on("undo-rejected", () => {
+    undoPending = false;
+    pendingUndoState = null;
+    setOnlineStatus("undo rejected");
   });
 }
 
@@ -363,6 +386,8 @@ function getPixel(node) {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  const isMobile = window.innerWidth <= 700;
+
   const sizeFactor = largeUi ? 1.2 : 1;
   const selectedRadius = pieceRadius * sizeFactor + 3;
   const highlightRadius = Math.max(10, Math.min(spacingX, spacingY) * 0.2);
@@ -394,7 +419,7 @@ function draw() {
     ctx.fill();
   });
 
-  if (!lowPower) {
+  if (!lowPower && !isMobile) {
     // Draw coordinate labels
     ctx.fillStyle = "rgba(20,20,20,0.75)";
     ctx.font = `${Math.max(10, pieceRadius * 0.6)}px Segoe UI`;
@@ -470,6 +495,9 @@ function resizeCanvas() {
 
   const boardWidth = maxX - minX;
   const boardHeight = maxY - minY;
+  let boardPixelWidth = 0;
+  let boardPixelHeight = 0;
+
   const computeLayout = (padX, padY) => {
     const usableW = sizeW - padX * 2;
     const usableH = sizeH - padY * 2;
@@ -483,8 +511,8 @@ function resizeCanvas() {
       spacingY = uniformSpacing;
     }
 
-    const boardPixelWidth = boardWidth * spacingX;
-    const boardPixelHeight = boardHeight * spacingY;
+    boardPixelWidth = boardWidth * spacingX;
+    boardPixelHeight = boardHeight * spacingY;
 
     offsetX = (sizeW - boardPixelWidth) / 2 - minX * spacingX;
     offsetY = (sizeH - boardPixelHeight) / 2 - minY * spacingY;
@@ -502,6 +530,12 @@ function resizeCanvas() {
     paddingX = safePadX;
     paddingY = safePadY;
     computeLayout(paddingX, paddingY);
+  }
+
+  if (isMobile) {
+    const bottomAligned = sizeH - paddingY - boardPixelHeight - minY * spacingY;
+    const topAligned = paddingY - minY * spacingY;
+    offsetY = Math.max(bottomAligned, topAligned);
   }
   requestDraw();
 }
@@ -723,6 +757,14 @@ resetBtn.addEventListener("click", resetGame);
 if (undoBtn) {
   undoBtn.addEventListener("click", () => {
     if (stateStack.length === 0) return;
+    if (currentRoom && socket) {
+      if (undoPending) return;
+      pendingUndoState = stateStack[stateStack.length - 1];
+      undoPending = true;
+      setOnlineStatus("undo requested");
+      socket.emit("undo-request", { room: currentRoom, state: pendingUndoState, name: playerName });
+      return;
+    }
     const prevState = stateStack.pop();
     restoreState(prevState);
     saveState();

@@ -285,7 +285,7 @@ button {
   }
 
   header {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   .legend {
@@ -316,7 +316,22 @@ button {
   .mobile-top {
     display: flex;
     position: sticky;
-    top: 8px;
+    top: 6px;
+    padding: 6px 6px;
+  }
+
+  .mobile-top .mobile-controls,
+  .mobile-top .turn-overlay {
+    font-size: 14px;
+  }
+
+  .mobile-top .mobile-controls {
+    min-height: 38px;
+    padding: 8px 12px;
+  }
+
+  .mobile-top .turn-overlay {
+    padding: 6px 10px;
   }
 
   .mobile-controls {
@@ -326,6 +341,9 @@ button {
   canvas {
     width: 100%;
     max-width: 100%;
+    max-height: none;
+    aspect-ratio: auto;
+    height: auto;
     border-radius: 12px;
   }
 
