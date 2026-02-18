@@ -31,6 +31,8 @@ const turnOverlayDesktop = document.getElementById("turnOverlayDesktop");
 const mobileControlsBtn = document.getElementById("mobileControlsBtn");
 const controlsBackdrop = document.getElementById("controlsBackdrop");
 const closeControlsBtn = document.getElementById("closeControlsBtn");
+const playerBadge = document.getElementById("playerBadge");
+const playerBadgeDesktop = document.getElementById("playerBadgeDesktop");
 
 let spacingX = 60;
 let spacingY = 60;
@@ -78,6 +80,14 @@ function setOnlineStatus(text) {
   if (onlineStatus) onlineStatus.textContent = `Status: ${text}`;
 }
 
+function updatePlayerBadge() {
+  const label = assignedColor ? `You: ${assignedColor[0].toUpperCase()}${assignedColor.slice(1)}` : "You: -";
+  if (playerBadge) playerBadge.querySelector(".label").textContent = label;
+  if (playerBadgeDesktop) playerBadgeDesktop.querySelector(".label").textContent = label;
+  document.body.classList.toggle("you-red", assignedColor === "red");
+  document.body.classList.toggle("you-blue", assignedColor === "blue");
+}
+
 function ensureSocket() {
   if (socket) return;
   socket = io();
@@ -91,6 +101,7 @@ function ensureSocket() {
     setOnlineStatus("room created");
     if (gameStatus) gameStatus.textContent = "Waiting for second player...";
     assignedColor = null;
+    updatePlayerBadge();
     if (colorStatus) colorStatus.textContent = "Color will be assigned automatically.";
     if (lobby) lobby.hidden = true;
     if (mainContent) mainContent.hidden = false;
@@ -103,6 +114,7 @@ function ensureSocket() {
   socket.on("room-joined", ({ room, color }) => {
     currentRoom = room;
     assignedColor = color;
+    updatePlayerBadge();
     if (roomCode) roomCode.textContent = `Room: ${room}`;
     setOnlineStatus("room joined");
     if (gameStatus) gameStatus.textContent = "Connected";
@@ -130,6 +142,7 @@ function ensureSocket() {
   socket.on("color-assigned", ({ color }) => {
     assignedColor = color;
     if (colorStatus) colorStatus.textContent = `You are ${color}`;
+    updatePlayerBadge();
     updateTurn();
   });
   socket.on("start-turn", ({ turn }) => {
@@ -723,6 +736,10 @@ function updateTurn() {
   const name = assignedColor === currentPlayer ? playerName : opponentName;
   turnText.textContent = name ? `Turn: ${who} (${name})` : `Turn: ${who}`;
   turnText.style.borderLeft = `6px solid ${currentPlayer === "red" ? COLORS.red : COLORS.blue}`;
+
+  document.body.classList.toggle("turn-red", currentPlayer === "red");
+  document.body.classList.toggle("turn-blue", currentPlayer === "blue");
+  updatePlayerBadge();
 
   const isMine = assignedColor && assignedColor === currentPlayer;
   const overlayText = isMine ? "Your turn" : "Opponent's turn";

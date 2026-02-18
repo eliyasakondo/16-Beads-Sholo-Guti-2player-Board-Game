@@ -35,12 +35,20 @@
           <span class="title-alt">16 Guti</span>
         </h1>
         <p class="tagline">Red vs Blue — select a bead and move to a valid point.</p>
+        <div id="playerBadgeDesktop" class="player-badge desktop" aria-live="polite">
+          <span class="dot"></span>
+          <span class="label">You: -</span>
+        </div>
       </header>
 
       <div class="board-wrap" id="gameContainer">
       <div class="mobile-top">
         <button id="mobileControlsBtn" class="mobile-controls">⚙ Controls</button>
         <div id="turnOverlay" class="turn-overlay">Your turn</div>
+        <div id="playerBadge" class="player-badge" aria-live="polite">
+          <span class="dot"></span>
+          <span class="label">You: -</span>
+        </div>
       </div>
       <canvas id="board" width="720" height="720" aria-label="Sholo Guti Board"></canvas>
       <div id="controlsBackdrop" class="controls-backdrop" hidden></div>

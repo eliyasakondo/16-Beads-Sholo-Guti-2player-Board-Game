@@ -108,6 +108,55 @@ canvas {
   pointer-events: none;
 }
 
+.player-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.player-badge .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #9ca3af;
+}
+
+.player-badge.desktop {
+  margin: 6px auto 0;
+}
+
+body.you-red .player-badge .dot {
+  background: var(--red);
+}
+
+body.you-blue .player-badge .dot {
+  background: var(--blue);
+}
+
+body.turn-red canvas {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(214, 69, 65, 0.35);
+}
+
+body.turn-blue canvas {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(43, 89, 195, 0.35);
+}
+
+body.turn-red .turn-overlay {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+body.turn-blue .turn-overlay {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 .mobile-top {
   display: none;
   align-items: center;
@@ -346,6 +395,11 @@ button {
     position: sticky;
     top: 6px;
     padding: 6px 6px;
+  }
+
+  .mobile-top .player-badge {
+    font-size: 12px;
+    padding: 5px 10px;
   }
 
   .mobile-top .mobile-controls,
