@@ -8,6 +8,8 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const rooms = new Map();
+const disconnectTimers = new Map(); // Store disconnect timers
+const DISCONNECT_GRACE_PERIOD = 60000; // 60 seconds
 
 const staticRoot = path.join(__dirname);
 app.use(express.static(staticRoot));
@@ -23,6 +25,7 @@ io.on("connection", (socket) => {
       guest: null,
       state: null,
       hostColor: null,
+      guestColor: null,
       hostName: payload?.name || "Player 1",
       guestName: null,
       colors: null,
@@ -42,6 +45,13 @@ io.on("connection", (socket) => {
       socket.emit("room-error", "Room full");
       return;
     }
+    
+    // Cancel any pending disconnect timer for this room
+    if (disconnectTimers.has(room)) {
+      clearTimeout(disconnectTimers.get(room));
+      disconnectTimers.delete(room);
+    }
+    
     data.guest = socket.id;
     data.guestName = payload?.name || "Player 2";
     socket.join(room);
@@ -50,6 +60,8 @@ io.on("connection", (socket) => {
     socket.to(room).emit("room-joined", { room, color: null });
     const rand = Math.random() < 0.5 ? "red" : "blue";
     const other = rand === "red" ? "blue" : "red";
+    data.hostColor = rand;
+    data.guestColor = other;
     io.to(data.host).emit("color-assigned", { color: rand });
     io.to(data.guest).emit("color-assigned", { color: other });
     const firstTurn = Math.random() < 0.5 ? "red" : "blue";
@@ -65,6 +77,61 @@ io.on("connection", (socket) => {
     if (!data) return;
     data.state = state;
     socket.to(room).emit("state", state);
+  });
+
+  socket.on("rejoin-room", (payload) => {
+    const room = payload?.room;
+    const name = payload?.name;
+    const data = rooms.get(room);
+    
+    if (!data) {
+      socket.emit("rejoin-failed", "Room not found or expired");
+      return;
+    }
+    
+    // Cancel any pending disconnect timer
+    if (disconnectTimers.has(room)) {
+      clearTimeout(disconnectTimers.get(room));
+      disconnectTimers.delete(room);
+    }
+    
+    // Determine if this is the host or guest
+    const isHost = data.hostName === name;
+    const isGuest = data.guestName === name;
+    
+    if (!isHost && !isGuest) {
+      socket.emit("rejoin-failed", "You were not in this room");
+      return;
+    }
+    
+    // Update socket ID
+    if (isHost) {
+      data.host = socket.id;
+    } else {
+      data.guest = socket.id;
+    }
+    
+    socket.join(room);
+    
+    // Determine color (based on stored colors if available)
+    let color = null;
+    if (data.hostColor && data.guestColor) {
+      color = isHost ? data.hostColor : data.guestColor;
+    }
+    
+    socket.emit("rejoin-success", { 
+      room, 
+      color,
+      names: { hostName: data.hostName, guestName: data.guestName }
+    });
+    
+    // Send current state
+    if (data.state) {
+      socket.emit("state", data.state);
+    }
+    
+    // Notify the other player
+    socket.to(room).emit("peer-joined", { name });
   });
 
   socket.on("undo-request", ({ room, state, name }) => {
@@ -87,8 +154,16 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     for (const [room, data] of rooms.entries()) {
       if (data.host === socket.id || data.guest === socket.id) {
-        rooms.delete(room);
-        socket.to(room).emit("room-error", "Host left");
+        // Don't delete immediately, give grace period for reconnection
+        if (!disconnectTimers.has(room)) {
+          const timer = setTimeout(() => {
+            rooms.delete(room);
+            disconnectTimers.delete(room);
+            // Notify remaining player if any
+            io.to(room).emit("room-error", "Player disconnected");
+          }, DISCONNECT_GRACE_PERIOD);
+          disconnectTimers.set(room, timer);
+        }
       }
     }
   });

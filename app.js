@@ -69,15 +69,61 @@ let assignedColor = null;
 let playerName = "";
 let opponentName = "";
 let lastTurn = null;
+let lastMove = null;
 let gameStarted = false;
 let awaitingState = false;
 let undoPending = false;
 let pendingUndoState = null;
 
 const STORAGE_KEY = "sholo-guti-state";
+const ROOM_SESSION_KEY = "sholo-guti-room-session";
 
 function setOnlineStatus(text) {
   if (onlineStatus) onlineStatus.textContent = `Status: ${text}`;
+}
+
+function saveRoomSession() {
+  if (!currentRoom) return;
+  try {
+    const session = {
+      room: currentRoom,
+      playerName: playerName,
+      assignedColor: assignedColor,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(ROOM_SESSION_KEY, JSON.stringify(session));
+  } catch (err) {
+    console.error("Failed to save room session", err);
+  }
+}
+
+function loadRoomSession() {
+  try {
+    const raw = localStorage.getItem(ROOM_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    // Session expires after 1 hour
+    if (Date.now() - session.timestamp > 3600000) {
+      clearRoomSession();
+      return null;
+    }
+    return session;
+  } catch (err) {
+    console.error("Failed to load room session", err);
+    return null;
+  }
+}
+
+function clearRoomSession() {
+  try {
+    localStorage.removeItem(ROOM_SESSION_KEY);
+  } catch (err) {
+    console.error("Failed to clear room session", err);
+  }
+}
+
+function isFlippedView() {
+  return Boolean(currentRoom && assignedColor === "red");
 }
 
 function updatePlayerBadge() {
@@ -92,7 +138,16 @@ function ensureSocket() {
   if (socket) return;
   socket = io();
 
-  socket.on("connect", () => setOnlineStatus("connected"));
+  socket.on("connect", () => {
+    setOnlineStatus("connected");
+    attemptAutoRejoin();
+  });
+  
+  socket.on("reconnect", () => {
+    setOnlineStatus("reconnected");
+    attemptAutoRejoin();
+  });
+  
   socket.on("disconnect", () => setOnlineStatus("disconnected"));
   socket.on("room-created", ({ room }) => {
     currentRoom = room;
@@ -108,6 +163,7 @@ function ensureSocket() {
     document.body.classList.remove("in-lobby");
     gameStarted = true;
     awaitingState = false;
+    saveRoomSession();
     resizeCanvas();
     resetGame();
   });
@@ -125,6 +181,7 @@ function ensureSocket() {
     gameStarted = true;
     awaitingState = true;
     if (gameStatus) gameStatus.textContent = "Syncing board...";
+    saveRoomSession();
     resizeCanvas();
     requestDraw();
   });
@@ -143,7 +200,36 @@ function ensureSocket() {
     assignedColor = color;
     if (colorStatus) colorStatus.textContent = `You are ${color}`;
     updatePlayerBadge();
+    saveRoomSession();
     updateTurn();
+    requestDraw();
+  });
+  
+  socket.on("rejoin-success", ({ room, color, names }) => {
+    currentRoom = room;
+    assignedColor = color;
+    if (names) {
+      if (playerName === names.hostName) opponentName = names.guestName || "";
+      else if (playerName === names.guestName) opponentName = names.hostName || "";
+    }
+    updatePlayerBadge();
+    if (roomCode) roomCode.textContent = `Room: ${room}`;
+    setOnlineStatus("rejoined successfully");
+    if (gameStatus) gameStatus.textContent = "Reconnected";
+    if (colorStatus) colorStatus.textContent = color ? `You are ${color}` : "";
+    if (lobby) lobby.hidden = true;
+    if (mainContent) mainContent.hidden = false;
+    document.body.classList.remove("in-lobby");
+    gameStarted = true;
+    awaitingState = true;
+    if (gameStatus) gameStatus.textContent = "Syncing board...";
+    resizeCanvas();
+    requestDraw();
+  });
+  
+  socket.on("rejoin-failed", (msg) => {
+    clearRoomSession();
+    setOnlineStatus(msg || "Failed to rejoin");
   });
   socket.on("start-turn", ({ turn }) => {
     if (turn === "red" || turn === "blue") {
@@ -183,6 +269,32 @@ function ensureSocket() {
 function sendState() {
   if (!socket || !currentRoom) return;
   socket.emit("state", { room: currentRoom, state: snapshotState() });
+}
+
+function attemptAutoRejoin() {
+  if (currentRoom && socket) {
+    // Already in a room, no need to rejoin
+    return;
+  }
+  
+  const session = loadRoomSession();
+  if (!session) return;
+  
+  if (!socket) {
+    ensureSocket();
+    return;
+  }
+  
+  currentRoom = session.room;
+  playerName = session.playerName;
+  assignedColor = session.assignedColor;
+  
+  setOnlineStatus("attempting to rejoin...");
+  socket.emit("rejoin-room", { 
+    room: session.room, 
+    name: session.playerName,
+    previousColor: session.assignedColor
+  });
 }
 
 function addEdge(a, b) {
@@ -392,9 +504,14 @@ function setupPieces() {
 }
 
 function getPixel(node) {
+  const x = offsetX + node.x * spacingX;
+  const y = offsetY + node.y * spacingY;
+  if (!isFlippedView()) {
+    return { x, y };
+  }
   return {
-    x: offsetX + node.x * spacingX,
-    y: offsetY + node.y * spacingY,
+    x,
+    y: canvas.height - y,
   };
 }
 
@@ -455,6 +572,32 @@ function draw() {
     ctx.arc(p.x, p.y, highlightRadius, 0, Math.PI * 2);
     ctx.fill();
   });
+
+  // Highlight last move (show to both players)
+  if (lastMove) {
+    // Highlight "from" position (light, dashed)
+    const fromNode = nodes.find((n) => n.id === lastMove.from);
+    if (fromNode) {
+      const p = getPixel(fromNode);
+      ctx.strokeStyle = "rgba(255, 193, 7, 0.5)";
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, pieceRadius * sizeFactor + 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    // Highlight "to" position (bright, solid)
+    const toNode = nodes.find((n) => n.id === lastMove.to);
+    if (toNode) {
+      const p = getPixel(toNode);
+      ctx.strokeStyle = "rgba(255, 193, 7, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, pieceRadius * sizeFactor + 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
 
   // Draw pieces
   nodes.forEach((node) => {
@@ -636,12 +779,14 @@ function snapshotState() {
   return {
     pieces: Array.from(pieces.entries()),
     currentPlayer,
+    lastMove,
   };
 }
 
 function restoreState(state) {
   pieces = new Map(state.pieces || []);
   currentPlayer = state.currentPlayer || "red";
+  lastMove = state.lastMove || null;
   stateStack = [];
   updateTurn();
   requestDraw();
@@ -709,6 +854,7 @@ function handleClick(evt) {
       if (move.capture) {
         const nextCaptures = getCaptureMoves(node.id);
         if (nextCaptures.length > 0) {
+          lastMove = { from: fromId, to: node.id };
           selectedId = node.id;
           legalMoves = nextCaptures;
           playSound("capture");
@@ -719,6 +865,7 @@ function handleClick(evt) {
         }
       }
 
+      lastMove = { from: fromId, to: node.id };
       selectedId = null;
       legalMoves = [];
       playSound(move.capture ? "capture" : "move");
@@ -761,6 +908,7 @@ function updateTurn() {
 function resetGame() {
   selectedId = null;
   legalMoves = [];
+  lastMove = null;
   currentPlayer = "red";
   buildBoard();
   setupPieces();
@@ -784,6 +932,7 @@ if (undoBtn) {
       socket.emit("undo-request", { room: currentRoom, state: pendingUndoState, name: playerName });
       return;
     }
+    lastMove = null;
     const prevState = stateStack.pop();
     restoreState(prevState);
     saveState();
@@ -903,3 +1052,10 @@ if (!loadState()) {
   resetGame();
 }
 resizeCanvas();
+
+// Try to auto-rejoin if there's a saved session
+const savedSession = loadRoomSession();
+if (savedSession) {
+  ensureSocket();
+  // The attemptAutoRejoin will be called in the connect event
+}
