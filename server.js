@@ -151,6 +151,42 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("rematch-request", ({ room, name }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    const requesterName = name || (socket.id === data.host ? data.hostName : data.guestName) || "Opponent";
+    socket.to(room).emit("rematch-request", { name: requesterName });
+  });
+
+  socket.on("rematch-response", ({ room, approved }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    if (approved) {
+      const firstTurn = Math.random() < 0.5 ? "red" : "blue";
+      io.to(room).emit("rematch-approved", { turn: firstTurn });
+    } else {
+      socket.to(room).emit("rematch-rejected");
+    }
+  });
+
+  socket.on("new-game-request", ({ room, name }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    const requesterName = name || (socket.id === data.host ? data.hostName : data.guestName) || "Opponent";
+    socket.to(room).emit("new-game-request", { name: requesterName });
+  });
+
+  socket.on("new-game-response", ({ room, approved }) => {
+    const data = rooms.get(room);
+    if (!data) return;
+    if (approved) {
+      const firstTurn = Math.random() < 0.5 ? "red" : "blue";
+      io.to(room).emit("new-game-approved", { turn: firstTurn });
+    } else {
+      socket.to(room).emit("new-game-rejected");
+    }
+  });
+
   socket.on("disconnect", () => {
     for (const [room, data] of rooms.entries()) {
       if (data.host === socket.id || data.guest === socket.id) {

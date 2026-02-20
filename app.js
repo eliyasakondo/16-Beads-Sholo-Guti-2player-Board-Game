@@ -33,6 +33,20 @@ const controlsBackdrop = document.getElementById("controlsBackdrop");
 const closeControlsBtn = document.getElementById("closeControlsBtn");
 const playerBadge = document.getElementById("playerBadge");
 const playerBadgeDesktop = document.getElementById("playerBadgeDesktop");
+const redScore = document.getElementById("redScore");
+const blueScore = document.getElementById("blueScore");
+const redScoreDesktop = document.getElementById("redScoreDesktop");
+const blueScoreDesktop = document.getElementById("blueScoreDesktop");
+const gameOverOverlay = document.getElementById("gameOverOverlay");
+const gameOverIcon = document.getElementById("gameOverIcon");
+const gameOverTitle = document.getElementById("gameOverTitle");
+const gameOverMessage = document.getElementById("gameOverMessage");
+const playAgainBtn = document.getElementById("playAgainBtn");
+const requestModal = document.getElementById("requestModal");
+const requestModalTitle = document.getElementById("requestModalTitle");
+const requestModalMessage = document.getElementById("requestModalMessage");
+const requestAcceptBtn = document.getElementById("requestAcceptBtn");
+const requestDeclineBtn = document.getElementById("requestDeclineBtn");
 
 let spacingX = 60;
 let spacingY = 60;
@@ -70,16 +84,47 @@ let playerName = "";
 let opponentName = "";
 let lastTurn = null;
 let lastMove = null;
+let redCaptures = 0;
+let blueCaptures = 0;
 let gameStarted = false;
 let awaitingState = false;
 let undoPending = false;
 let pendingUndoState = null;
+let rematchPending = false;
+let newGamePending = false;
+let gameOver = false;
+let winner = null;
+let requestAcceptHandler = null;
+let requestDeclineHandler = null;
 
 const STORAGE_KEY = "sholo-guti-state";
 const ROOM_SESSION_KEY = "sholo-guti-room-session";
 
 function setOnlineStatus(text) {
   if (onlineStatus) onlineStatus.textContent = `Status: ${text}`;
+}
+
+function hideRequestModal() {
+  if (requestModal) requestModal.hidden = true;
+  requestAcceptHandler = null;
+  requestDeclineHandler = null;
+}
+
+function showRequestModal({ title, message, onAccept, onDecline }) {
+  if (!requestModal || !requestModalTitle || !requestModalMessage) {
+    const approved = window.confirm(message || "Approve request?");
+    if (approved) onAccept?.();
+    else onDecline?.();
+    return;
+  }
+  if (!requestModal.hidden) {
+    return;
+  }
+  requestModalTitle.textContent = title || "Request";
+  requestModalMessage.textContent = message || "Opponent sent a request.";
+  requestAcceptHandler = onAccept || null;
+  requestDeclineHandler = onDecline || null;
+  requestModal.hidden = false;
 }
 
 function saveRoomSession() {
@@ -163,6 +208,7 @@ function ensureSocket() {
     document.body.classList.remove("in-lobby");
     gameStarted = true;
     awaitingState = false;
+    if (gameOverOverlay) gameOverOverlay.hidden = true;
     saveRoomSession();
     resizeCanvas();
     resetGame();
@@ -180,6 +226,7 @@ function ensureSocket() {
     document.body.classList.remove("in-lobby");
     gameStarted = true;
     awaitingState = true;
+    if (gameOverOverlay) gameOverOverlay.hidden = true;
     if (gameStatus) gameStatus.textContent = "Syncing board...";
     saveRoomSession();
     resizeCanvas();
@@ -222,6 +269,7 @@ function ensureSocket() {
     document.body.classList.remove("in-lobby");
     gameStarted = true;
     awaitingState = true;
+    if (gameOverOverlay) gameOverOverlay.hidden = true;
     if (gameStatus) gameStatus.textContent = "Syncing board...";
     resizeCanvas();
     requestDraw();
@@ -263,6 +311,76 @@ function ensureSocket() {
     undoPending = false;
     pendingUndoState = null;
     setOnlineStatus("undo rejected");
+  });
+
+  socket.on("rematch-request", ({ name }) => {
+    const requester = name || "Opponent";
+    showRequestModal({
+      title: "Rematch Request",
+      message: `${requester} wants a rematch. Start a new match?`,
+      onAccept: () => {
+        hideRequestModal();
+        socket.emit("rematch-response", { room: currentRoom, approved: true });
+      },
+      onDecline: () => {
+        hideRequestModal();
+        socket.emit("rematch-response", { room: currentRoom, approved: false });
+        setOnlineStatus("rematch declined");
+      },
+    });
+  });
+
+  socket.on("rematch-approved", ({ turn }) => {
+    rematchPending = false;
+    newGamePending = false;
+    resetGame({ broadcast: false });
+    if (turn === "red" || turn === "blue") {
+      currentPlayer = turn;
+      updateTurn();
+      requestDraw();
+    }
+    setOnlineStatus("rematch started");
+  });
+
+  socket.on("rematch-rejected", () => {
+    rematchPending = false;
+    newGamePending = false;
+    setOnlineStatus("rematch rejected");
+  });
+
+  socket.on("new-game-request", ({ name }) => {
+    const requester = name || "Opponent";
+    showRequestModal({
+      title: "New Game Request",
+      message: `${requester} wants to start a new game. Accept?`,
+      onAccept: () => {
+        hideRequestModal();
+        socket.emit("new-game-response", { room: currentRoom, approved: true });
+      },
+      onDecline: () => {
+        hideRequestModal();
+        socket.emit("new-game-response", { room: currentRoom, approved: false });
+        setOnlineStatus("new game declined");
+      },
+    });
+  });
+
+  socket.on("new-game-approved", ({ turn }) => {
+    newGamePending = false;
+    rematchPending = false;
+    resetGame({ broadcast: false });
+    if (turn === "red" || turn === "blue") {
+      currentPlayer = turn;
+      updateTurn();
+      requestDraw();
+    }
+    setOnlineStatus("new game started");
+  });
+
+  socket.on("new-game-rejected", () => {
+    newGamePending = false;
+    rematchPending = false;
+    setOnlineStatus("new game rejected");
   });
 }
 
@@ -780,15 +898,33 @@ function snapshotState() {
     pieces: Array.from(pieces.entries()),
     currentPlayer,
     lastMove,
+    redCaptures,
+    blueCaptures,
+    gameOver,
+    winner,
   };
 }
 
 function restoreState(state) {
+  const wasGameOver = gameOver;
   pieces = new Map(state.pieces || []);
   currentPlayer = state.currentPlayer || "red";
   lastMove = state.lastMove || null;
+  redCaptures = state.redCaptures || 0;
+  blueCaptures = state.blueCaptures || 0;
+  gameOver = state.gameOver || false;
+  winner = state.winner || null;
+  selectedId = null;
+  legalMoves = [];
   stateStack = [];
+  updateScoreDisplay();
   updateTurn();
+  if (gameOver && winner && (!wasGameOver || gameOverOverlay?.hidden)) {
+    announceWinner(winner);
+  }
+  if (!gameOver && gameOverOverlay) {
+    gameOverOverlay.hidden = true;
+  }
   requestDraw();
 }
 
@@ -813,6 +949,8 @@ function loadState() {
 }
 
 function handleClick(evt) {
+  if (gameOver) return; // Don't allow moves if game is over
+  
   const rect = canvas.getBoundingClientRect();
   const x = evt.clientX - rect.left;
   const y = evt.clientY - rect.top;
@@ -847,9 +985,18 @@ function handleClick(evt) {
       stateStack.push(snapshotState());
       pieces.set(node.id, currentPlayer);
       pieces.delete(selectedId);
+      
       if (move.capture) {
         pieces.delete(move.capture);
+        // Increment capture count for the current player
+        if (currentPlayer === "red") {
+          redCaptures++;
+        } else {
+          blueCaptures++;
+        }
+        updateScoreDisplay();
       }
+      
       if (navigator.vibrate) navigator.vibrate(20);
       if (move.capture) {
         const nextCaptures = getCaptureMoves(node.id);
@@ -869,8 +1016,13 @@ function handleClick(evt) {
       selectedId = null;
       legalMoves = [];
       playSound(move.capture ? "capture" : "move");
-      currentPlayer = currentPlayer === "red" ? "blue" : "red";
-      updateTurn();
+      
+      // Check for winner before switching turns
+      if (!checkWinner()) {
+        currentPlayer = currentPlayer === "red" ? "blue" : "red";
+        updateTurn();
+      }
+      
       saveState();
       sendState();
       requestDraw();
@@ -905,22 +1057,117 @@ function updateTurn() {
   lastTurn = currentPlayer;
 }
 
-function resetGame() {
+function updateScoreDisplay() {
+  if (redScore) redScore.textContent = redCaptures;
+  if (blueScore) blueScore.textContent = blueCaptures;
+  if (redScoreDesktop) redScoreDesktop.textContent = redCaptures;
+  if (blueScoreDesktop) blueScoreDesktop.textContent = blueCaptures;
+}
+
+function checkWinner() {
+  if (redCaptures >= 16) {
+    gameOver = true;
+    winner = "red";
+    announceWinner("red");
+    return true;
+  }
+  if (blueCaptures >= 16) {
+    gameOver = true;
+    winner = "blue";
+    announceWinner("blue");
+    return true;
+  }
+  return false;
+}
+
+function announceWinner(winnerColor) {
+  if (!gameOverOverlay) return;
+
+  const isVictory = assignedColor === winnerColor || !assignedColor;
+  const colorName = winnerColor.charAt(0).toUpperCase() + winnerColor.slice(1);
+
+  if (gameOverIcon) {
+    gameOverIcon.textContent = isVictory ? "🎉" : "😔";
+  }
+
+  if (gameOverTitle) {
+    gameOverTitle.textContent = isVictory ? "VICTORY!" : "DEFEAT";
+    gameOverTitle.className = isVictory ? "game-over-title victory" : "game-over-title defeat";
+  }
+
+  if (gameOverMessage) {
+    if (currentRoom) {
+      gameOverMessage.textContent = isVictory
+        ? "You captured 16 pieces!"
+        : `${colorName} captured 16 pieces`;
+    } else {
+      gameOverMessage.textContent = `${colorName} captured 16 pieces!`;
+    }
+  }
+
+  gameOverOverlay.hidden = false;
+}
+
+function resetGame(options = {}) {
+  const broadcast = options.broadcast !== false;
   selectedId = null;
   legalMoves = [];
   lastMove = null;
+  redCaptures = 0;
+  blueCaptures = 0;
+  gameOver = false;
+  winner = null;
+  rematchPending = false;
+  newGamePending = false;
   currentPlayer = "red";
   buildBoard();
   setupPieces();
   stateStack = [];
+  updateScoreDisplay();
   updateTurn();
   resizeCanvas();
   saveState();
-  sendState();
+  if (broadcast) sendState();
+  
+  // Hide game over overlay
+  if (gameOverOverlay) gameOverOverlay.hidden = true;
+  hideRequestModal();
 }
 
 canvas.addEventListener("click", handleClick);
-resetBtn.addEventListener("click", resetGame);
+if (requestAcceptBtn) {
+  requestAcceptBtn.addEventListener("click", () => {
+    requestAcceptHandler?.();
+  });
+}
+if (requestDeclineBtn) {
+  requestDeclineBtn.addEventListener("click", () => {
+    requestDeclineHandler?.();
+  });
+}
+resetBtn.addEventListener("click", () => {
+  if (currentRoom && socket) {
+    if (newGamePending) return;
+    newGamePending = true;
+    setOnlineStatus("new game requested");
+    socket.emit("new-game-request", { room: currentRoom, name: playerName });
+    socket.emit("rematch-request", { room: currentRoom, name: playerName });
+    return;
+  }
+  resetGame();
+});
+if (playAgainBtn) {
+  playAgainBtn.addEventListener("click", () => {
+    if (currentRoom && socket) {
+      if (rematchPending) return;
+      rematchPending = true;
+      setOnlineStatus("rematch requested");
+      socket.emit("rematch-request", { room: currentRoom, name: playerName });
+      return;
+    }
+    resetGame();
+  });
+}
 if (undoBtn) {
   undoBtn.addEventListener("click", () => {
     if (stateStack.length === 0) return;
@@ -1050,6 +1297,8 @@ document.body.classList.add("in-lobby");
 if (winnerModal) winnerModal.hidden = true;
 if (!loadState()) {
   resetGame();
+} else {
+  updateScoreDisplay();
 }
 resizeCanvas();
 
